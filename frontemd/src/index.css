@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ===============================
+   🎨 Custom Dark Theme Variables
+   =============================== */
+:root {
+  --color-background: #0f1419;
+  --color-surface: #1a1f26;
+  --color-border: #2d3139;
+  --color-text: #e8eaed;
+  --color-text-muted: #9ca3af;
+  --color-primary: #7c3aed;
+  --color-primary-hover: #a78bfa;
+  --color-danger: #ef4444;
+}
+/* ===============================
+   ✨ Custom Utility Mappings
+   =============================== */
+@utility bg-primary {
+  background-color: var(--color-primary);
+}
+
+@utility bg-primary-hover {
+  background-color: var(--color-primary-hover);
+}
+
+@utility text-primary {
+  color: var(--color-primary);
+}
+
+@utility border-danger {
+  border-color: var(--color-danger);
+}
+
+@utility bg-danger {
+  background-color: var(--color-danger);
+}
+
+@utility text-danger {
+  color: var(--color-danger);
+}
+
+@utility bg-surface {
+  background-color: var(--color-surface);
+}
+
+@utility border-border {
+  border-color: var(--color-border);
+}
+
+@utility text-foreground {
+  color: var(--color-text);
+}
+
+@utility text-muted {
+  color: var(--color-text-muted);
+}
+
+@utility bg-background {
+  background-color: var(--color-background);
+}
