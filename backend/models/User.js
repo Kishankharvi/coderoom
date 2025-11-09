@@ -5,8 +5,10 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ["student", "mentor", "admin"], default: "student" },
+  role: { type: String, enum: ["student", "teacher", "interviewer", "admin"], default: "student" },
   avatar: { type: String, default: null },
+  ownedRooms: [{ type: mongoose.Schema.Types.ObjectId, ref: "Room" }],
+  joinedRooms: [{ type: mongoose.Schema.Types.ObjectId, ref: "Room" }],
   createdAt: { type: Date, default: Date.now },
 })
 

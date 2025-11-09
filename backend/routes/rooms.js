@@ -1,82 +1,161 @@
-import express from "express"
-import { v4 as uuidv4 } from "uuid"
-import Room from "../models/Room.js"
-import { verifyToken } from "./auth.js"
+// routes/files.js
+import express from "express";
+import { v4 as uuidv4 } from "uuid";
+import { verifyToken } from "./auth.js";
+import File from "../models/File.js";
 
-const router = express.Router()
+const router = express.Router();
 
-// Create a new room (mentors only)
-router.post("/create", verifyToken, async (req, res) => {
+/**
+ * @route   GET /api/files/room/:roomId
+ * @desc    Get all files shared in a specific room
+ * @access  Private (authenticated users)
+ */
+router.get("/room/:roomId", verifyToken, async (req, res) => {
   try {
-    if (req.userRole !== "mentor" && req.userRole !== "admin") {
-      return res.status(403).json({ error: "Only mentors can create rooms" })
+    const files = await File.find({ room: req.params.roomId })
+      .populate("uploader", "name email avatar")
+      .sort({ createdAt: -1 });
+
+    res.json(files);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @route   POST /api/files/upload
+ * @desc    Upload a file to a room
+ * @access  Private (authenticated users)
+ */
+router.post("/upload", verifyToken, async (req, res) => {
+  try {
+    const { filename, mimeType, fileData, room } = req.body;
+
+    if (!filename || !fileData) {
+      return res.status(400).json({ error: "Filename and file data required" });
     }
 
-    const { name, language } = req.body
-    const roomId = uuidv4().slice(0, 8)
+    const file = new File({
+      filename: uuidv4(),
+      originalName: filename,
+      mimeType: mimeType || "application/octet-stream",
+      size: Buffer.byteLength(fileData, "base64"),
+      uploader: req.userId,
+      room,
+      fileData: Buffer.from(fileData, "base64"),
+      shareUrl: `share-${uuidv4()}`,
+    });
 
-    const room = new Room({
-      roomId,
-      name: name || `Room ${roomId}`,
-      mentor: req.userId,
-      language: language || "javascript",
-    })
+    await file.save();
+    await file.populate("uploader", "name email avatar");
 
-    await room.save()
-
-    res.status(201).json({ message: "Room created", room })
+    res.status(201).json({
+      message: "File uploaded successfully",
+      file: {
+        _id: file._id,
+        originalName: file.originalName,
+        size: file.size,
+        shareUrl: file.shareUrl,
+        uploader: file.uploader,
+        createdAt: file.createdAt,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message });
   }
-})
+});
 
-// Get all active rooms
-router.get("/active", async (req, res) => {
+/**
+ * @route   GET /api/files/download/:fileId
+ * @desc    Download a specific file by ID
+ * @access  Private
+ */
+router.get("/download/:fileId", verifyToken, async (req, res) => {
   try {
-    const rooms = await Room.find({ isActive: true })
-      .populate("mentor", "name email")
-      .populate("students", "name email")
-    res.json(rooms)
+    const file = await File.findById(req.params.fileId);
+    if (!file) return res.status(404).json({ error: "File not found" });
+
+    file.downloads += 1;
+    await file.save();
+
+    res.set("Content-Type", file.mimeType);
+    res.set("Content-Disposition", `attachment; filename="${file.originalName}"`);
+    res.send(file.fileData);
   } catch (error) {
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message });
   }
-})
+});
 
-// Get room by ID
-router.get("/:roomId", async (req, res) => {
+/**
+ * @route   DELETE /api/files/:fileId
+ * @desc    Delete a file (only the uploader can do this)
+ * @access  Private
+ */
+router.delete("/:fileId", verifyToken, async (req, res) => {
   try {
-    const room = await Room.findOne({ roomId: req.params.roomId })
-      .populate("mentor", "name email avatar")
-      .populate("students", "name email avatar")
+    const file = await File.findById(req.params.fileId);
+    if (!file) return res.status(404).json({ error: "File not found" });
 
-    if (!room) {
-      return res.status(404).json({ error: "Room not found" })
+    if (file.uploader.toString() !== req.userId) {
+      return res.status(403).json({ error: "You can only delete your own files" });
     }
 
-    res.json(room)
+    await File.deleteOne({ _id: req.params.fileId });
+    res.json({ message: "File deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message });
   }
-})
+});
 
-// Join room
-router.post("/:roomId/join", verifyToken, async (req, res) => {
+/**
+ * @route   GET /api/files/share/:shareUrl
+ * @desc    Access a file using its share link
+ * @access  Public (anyone with link)
+ */
+router.get("/share/:shareUrl", async (req, res) => {
   try {
-    const room = await Room.findOne({ roomId: req.params.roomId })
+    const file = await File.findOne({ shareUrl: req.params.shareUrl });
+    if (!file) return res.status(404).json({ error: "Shared file not found or expired" });
 
-    if (!room) {
-      return res.status(404).json({ error: "Room not found" })
+    if (file.expiresAt && new Date() > file.expiresAt) {
+      return res.status(410).json({ error: "Share link has expired" });
     }
 
-    if (!room.students.includes(req.userId)) {
-      room.students.push(req.userId)
-      await room.save()
-    }
+    file.accessLog.push({ userId: null, accessedAt: new Date() });
+    await file.save();
 
-    res.json({ message: "Joined room", room })
+    res.set("Content-Type", file.mimeType);
+    res.set("Content-Disposition", `attachment; filename="${file.originalName}"`);
+    res.send(file.fileData);
   } catch (error) {
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message });
   }
-})
+});
 
-export default router
+/**
+ * @route   GET /api/files/info/:fileId
+ * @desc    Get file metadata by ID
+ * @access  Private
+ */
+router.get("/info/:fileId", verifyToken, async (req, res) => {
+  try {
+    const file = await File.findById(req.params.fileId).populate("uploader", "name email avatar");
+    if (!file) return res.status(404).json({ error: "File not found" });
+
+    res.json({
+      _id: file._id,
+      originalName: file.originalName,
+      size: file.size,
+      mimeType: file.mimeType,
+      uploader: file.uploader,
+      createdAt: file.createdAt,
+      downloads: file.downloads,
+      shareUrl: file.shareUrl,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;

@@ -1,93 +1,94 @@
-"use client"
+// src/pages/AdminDashboard.jsx
+"use client";
 
-import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
-import axios from "axios"
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const AdminDashboard = ({ user }) => {
-  const navigate = useNavigate()
-  const [stats, setStats] = useState(null)
-  const [users, setUsers] = useState([])
-  const [rooms, setRooms] = useState([])
-  const [files, setFiles] = useState([])
-  const [activeTab, setActiveTab] = useState("stats")
-  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate();
+  const [stats, setStats] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [files, setFiles] = useState([]);
+  const [activeTab, setActiveTab] = useState("stats");
+  const [loading, setLoading] = useState(true);
 
-  const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` }
+  const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
 
   useEffect(() => {
-    if (user?.role !== "admin") {
-      navigate("/dashboard")
-      return
+    if (!user || user.role !== "admin") {
+      navigate("/dashboard", { replace: true });
+      return;
     }
-
-    fetchData()
-  }, [user, navigate])
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      const [statsRes, usersRes, roomsRes, filesRes] = await Promise.all([
+      const calls = [
         axios.get("/api/admin/stats", { headers }),
         axios.get("/api/admin/users", { headers }),
         axios.get("/api/admin/rooms", { headers }),
         axios.get("/api/admin/files", { headers }),
-      ])
+      ];
 
-      setStats(statsRes.data)
-      setUsers(usersRes.data)
-      setRooms(roomsRes.data)
-      setFiles(filesRes.data)
-    } catch (error) {
-      console.error("Failed to fetch admin data:", error)
+      const [statsRes, usersRes, roomsRes, filesRes] = await Promise.allSettled(calls);
+
+      if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
+      if (usersRes.status === "fulfilled") setUsers(usersRes.value.data);
+      if (roomsRes.status === "fulfilled") setRooms(roomsRes.value.data);
+      if (filesRes.status === "fulfilled") setFiles(filesRes.value.data);
+    } catch (err) {
+      console.error("Failed to fetch admin data:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleChangeUserRole = async (userId, newRole) => {
     try {
-      await axios.put(`/api/admin/users/${userId}/role`, { role: newRole }, { headers })
-      setUsers(users.map((u) => (u._id === userId ? { ...u, role: newRole } : u)))
-    } catch (error) {
-      console.error("Failed to update user role:", error)
+      await axios.put(`/api/admin/users/${userId}/role`, { role: newRole }, { headers });
+      setUsers((prev) => prev.map((u) => (u._id === userId ? { ...u, role: newRole } : u)));
+    } catch (err) {
+      console.error("Failed to update user role:", err);
     }
-  }
+  };
 
   const handleDeleteUser = async (userId) => {
-    if (window.confirm("Are you sure you want to delete this user?")) {
-      try {
-        await axios.delete(`/api/admin/users/${userId}`, { headers })
-        setUsers(users.filter((u) => u._id !== userId))
-      } catch (error) {
-        console.error("Failed to delete user:", error)
-      }
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+    try {
+      await axios.delete(`/api/admin/users/${userId}`, { headers });
+      setUsers((prev) => prev.filter((u) => u._id !== userId));
+    } catch (err) {
+      console.error("Failed to delete user:", err);
     }
-  }
+  };
 
   const handleCloseRoom = async (roomId) => {
-    if (window.confirm("Are you sure you want to close this room?")) {
-      try {
-        await axios.put(`/api/admin/rooms/${roomId}/close`, {}, { headers })
-        setRooms(rooms.filter((r) => r.roomId !== roomId))
-      } catch (error) {
-        console.error("Failed to close room:", error)
-      }
+    if (!window.confirm("Are you sure you want to close this room?")) return;
+    try {
+      await axios.put(`/api/admin/rooms/${roomId}/close`, {}, { headers });
+      setRooms((prev) => prev.filter((r) => r.roomId !== roomId));
+    } catch (err) {
+      console.error("Failed to close room:", err);
     }
-  }
+  };
 
   const formatBytes = (bytes) => {
-    if (bytes === 0) return "0 B"
-    const k = 1024
-    const sizes = ["B", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return (bytes / Math.pow(k, i)).toFixed(2) + " " + sizes[i]
-  }
+    if (!bytes) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+  };
 
   const handleLogout = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    navigate("/login")
-  }
+    localStorage.clear();
+    navigate("/login", { replace: true });
+  };
 
   if (loading) {
     return (
@@ -97,7 +98,7 @@ const AdminDashboard = ({ user }) => {
           <p className="text-foreground">Loading...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -137,21 +138,21 @@ const AdminDashboard = ({ user }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="p-6 rounded-lg bg-card-bg border border-border">
               <h3 className="text-sm font-semibold text-gray-400 uppercase mb-2">Total Users</h3>
-              <p className="text-3xl font-bold text-foreground">{stats.userStats.total}</p>
+              <p className="text-3xl font-bold text-foreground">{stats.userStats?.total ?? 0}</p>
               <p className="text-sm text-gray-500 mt-2">
-                {stats.userStats.mentors} mentors, {stats.userStats.students} students
+                {stats.userStats?.mentors ?? 0} mentors, {stats.userStats?.students ?? 0} students
               </p>
             </div>
 
             <div className="p-6 rounded-lg bg-card-bg border border-border">
               <h3 className="text-sm font-semibold text-gray-400 uppercase mb-2">Active Rooms</h3>
-              <p className="text-3xl font-bold text-foreground">{stats.roomStats.active}</p>
+              <p className="text-3xl font-bold text-foreground">{stats.roomStats?.active ?? 0}</p>
             </div>
 
             <div className="p-6 rounded-lg bg-card-bg border border-border">
               <h3 className="text-sm font-semibold text-gray-400 uppercase mb-2">Total Files</h3>
-              <p className="text-3xl font-bold text-foreground">{stats.fileStats.total}</p>
-              <p className="text-sm text-gray-500 mt-2">Total size: {formatBytes(stats.fileStats.totalSize)}</p>
+              <p className="text-3xl font-bold text-foreground">{stats.fileStats?.total ?? 0}</p>
+              <p className="text-sm text-gray-500 mt-2">Total size: {formatBytes(stats.fileStats?.totalSize)}</p>
             </div>
           </div>
         )}
@@ -170,14 +171,14 @@ const AdminDashboard = ({ user }) => {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
-                  <tr key={user._id} className="border-b border-border hover:bg-border/50 transition">
-                    <td className="px-6 py-3">{user.name}</td>
-                    <td className="px-6 py-3 text-gray-400">{user.email}</td>
+                {users.map((u) => (
+                  <tr key={u._id} className="border-b border-border hover:bg-border/50 transition">
+                    <td className="px-6 py-3">{u.name}</td>
+                    <td className="px-6 py-3 text-gray-400">{u.email}</td>
                     <td className="px-6 py-3">
                       <select
-                        value={user.role}
-                        onChange={(e) => handleChangeUserRole(user._id, e.target.value)}
+                        value={u.role}
+                        onChange={(e) => handleChangeUserRole(u._id, e.target.value)}
                         className="px-2 py-1 rounded bg-border text-foreground border border-border text-sm"
                       >
                         <option value="student">Student</option>
@@ -185,10 +186,10 @@ const AdminDashboard = ({ user }) => {
                         <option value="admin">Admin</option>
                       </select>
                     </td>
-                    <td className="px-6 py-3 text-sm text-gray-400">{new Date(user.createdAt).toLocaleDateString()}</td>
+                    <td className="px-6 py-3 text-sm text-gray-400">{new Date(u.createdAt).toLocaleDateString()}</td>
                     <td className="px-6 py-3">
                       <button
-                        onClick={() => handleDeleteUser(user._id)}
+                        onClick={() => handleDeleteUser(u._id)}
                         className="px-3 py-1 rounded text-sm bg-red-600/20 text-red-400 hover:bg-red-600/30 transition"
                       >
                         Delete
@@ -222,11 +223,11 @@ const AdminDashboard = ({ user }) => {
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
                     <p className="text-gray-400">Mentor</p>
-                    <p className="font-semibold">{room.mentor?.name}</p>
+                    <p className="font-semibold">{room.mentor?.name ?? "—"}</p>
                   </div>
                   <div>
                     <p className="text-gray-400">Students</p>
-                    <p className="font-semibold">{room.students.length}</p>
+                    <p className="font-semibold">{room.students?.length ?? 0}</p>
                   </div>
                   <div>
                     <p className="text-gray-400">Mode</p>
@@ -257,9 +258,9 @@ const AdminDashboard = ({ user }) => {
                 {files.map((file) => (
                   <tr key={file._id} className="border-b border-border hover:bg-border/50 transition">
                     <td className="px-6 py-3">{file.originalName}</td>
-                    <td className="px-6 py-3 text-gray-400">{file.uploader?.name}</td>
+                    <td className="px-6 py-3 text-gray-400">{file.uploader?.name ?? "Unknown"}</td>
                     <td className="px-6 py-3 text-sm">{formatBytes(file.size)}</td>
-                    <td className="px-6 py-3 text-sm">{file.downloads}</td>
+                    <td className="px-6 py-3 text-sm">{file.downloads ?? 0}</td>
                     <td className="px-6 py-3 text-sm text-gray-400">{new Date(file.createdAt).toLocaleDateString()}</td>
                   </tr>
                 ))}
@@ -269,7 +270,7 @@ const AdminDashboard = ({ user }) => {
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default AdminDashboard
+export default AdminDashboard;

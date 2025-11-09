@@ -1,41 +1,39 @@
-import express from "express"
-import axios from "axios"
-import { verifyToken } from "./auth.js"
+// routes/execution.js
+import express from "express";
+import axios from "axios";
+import { verifyToken } from "./auth.js";
 
-const router = express.Router()
-const PISTON_API = "https://emkc.org/api/v2/piston"
+const router = express.Router();
+const PISTON_API = "https://emkc.org/api/v2/piston";
 
-// Execute code
+/**
+ * @route   POST /api/execute/execute
+ * @desc    Execute user code using the Piston API
+ * @access  Private
+ */
 router.post("/execute", verifyToken, async (req, res) => {
   try {
-    const { code, language, input = "" } = req.body
+    const { code, language, input = "", roomId } = req.body;
+    if (!code || !language) return res.status(400).json({ error: "Code and language are required" });
 
-    if (!code || !language) {
-      return res.status(400).json({ error: "Code and language required" })
-    }
-
-    // Map language names to Piston language identifiers
+    // Map to valid Piston runtime names
     const languageMap = {
       javascript: "javascript",
       python: "python3",
       java: "java",
       cpp: "cpp",
       c: "c",
-      html: "html",
-      css: "css",
       php: "php",
       ruby: "ruby",
       go: "go",
       rust: "rust",
-    }
+    };
 
-    const pistonLanguage = languageMap[language.toLowerCase()]
+    const pistonLanguage = languageMap[language.toLowerCase()];
+    if (!pistonLanguage) return res.status(400).json({ error: `Unsupported language: ${language}` });
 
-    if (!pistonLanguage) {
-      return res.status(400).json({ error: `Language ${language} is not supported` })
-    }
+    const startTime = Date.now();
 
-    // Execute code via Piston API
     const response = await axios.post(`${PISTON_API}/execute`, {
       language: pistonLanguage,
       version: "*",
@@ -50,42 +48,49 @@ router.post("/execute", verifyToken, async (req, res) => {
       run_timeout: 5000,
       compile_memory_limit: -1,
       run_memory_limit: -1,
-    })
+    });
+
+    const executionTime = Date.now() - startTime;
 
     const output = {
       stdout: response.data.run?.stdout || "",
       stderr: response.data.run?.stderr || response.data.compile?.stderr || "",
       exitCode: response.data.run?.code || 0,
-      language: language,
-      executionTime: response.data.run?.signal || 0,
-    }
+      language,
+      executionTime,
+      timestamp: new Date(),
+    };
 
-    res.json(output)
+    res.json(output);
   } catch (error) {
-    console.error("Execution error:", error.message)
     res.status(500).json({
       error: "Code execution failed",
       stdout: "",
       stderr: error.message,
       exitCode: 1,
-    })
+    });
   }
-})
+});
 
-// Get supported languages
+/**
+ * @route   GET /api/execute/languages
+ * @desc    Retrieve all supported languages from Piston API
+ * @access  Public
+ */
 router.get("/languages", async (req, res) => {
   try {
-    const response = await axios.get(`${PISTON_API}/runtimes`)
+    const response = await axios.get(`${PISTON_API}/runtimes`);
     const languages = response.data.map((runtime) => ({
       name: runtime.language,
       version: runtime.version,
-    }))
-    res.json(languages)
+    }));
+    res.json(languages);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch languages" })
+    res.status(500).json({ error: "Failed to fetch languages" });
   }
-})
+});
 
+// Helper function for file extensions
 function getFileExtension(language) {
   const extensions = {
     javascript: "js",
@@ -93,14 +98,12 @@ function getFileExtension(language) {
     java: "java",
     cpp: "cpp",
     c: "c",
-    html: "html",
-    css: "css",
     php: "php",
     ruby: "rb",
     go: "go",
     rust: "rs",
-  }
-  return extensions[language] || "txt"
+  };
+  return extensions[language] || "txt";
 }
 
-export default router
+export default router;
